@@ -1,7 +1,7 @@
 {
-  "name": "@apify/imdb",
+  "name": "@apify/hiring-database",
   "version": "0.1.0",
-  "description": "Minimalistic MongoDB-like in-memory document database in TypeScript.",
+  "description": "A minimalistic, MongoDB-like document database for TypeScript.",
   "license": "MIT",
   "type": "commonjs",
   "main": "./dist/cjs/index.js",

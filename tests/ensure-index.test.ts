@@ -88,4 +88,53 @@ describe('ensureIndex', () => {
       DuplicateKeyError,
     );
   });
+
+  it('accepts a descending direction', async () => {
+    await users.ensureIndex({ score: -1 }, { unique: true });
+    expect(users.listIndexes()[0]?.spec).toEqual({ score: -1 });
+  });
+
+  it('frees a unique key once its document is deleted', async () => {
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    const first = await users.insert({ email: 'a@x.com' });
+    await expect(users.insert({ email: 'a@x.com' })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+    await users.delete(first._id);
+    await expect(users.insert({ email: 'a@x.com' })).resolves.toBeDefined();
+  });
+
+  it('enforces several unique indexes simultaneously', async () => {
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    await users.ensureIndex({ username: 1 }, { unique: true });
+    await users.insert({ email: 'a@x.com', username: 'ada' });
+    await expect(
+      users.insert({ email: 'a@x.com', username: 'other' }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+    await expect(
+      users.insert({ email: 'other@x.com', username: 'ada' }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+    await expect(
+      users.insert({ email: 'other@x.com', username: 'other' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('creates a unique index over already-valid data and then enforces it', async () => {
+    await users.insert({ email: 'a@x.com' });
+    await users.insert({ email: 'b@x.com' });
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    expect(users.listIndexes()).toHaveLength(1);
+    await expect(users.insert({ email: 'a@x.com' })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
+  it('exposes the offending fields and value on the error', async () => {
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    await users.insert({ email: 'a@x.com' });
+    await expect(users.insert({ email: 'a@x.com' })).rejects.toMatchObject({
+      fields: ['email'],
+      value: ['a@x.com'],
+    });
+  });
 });

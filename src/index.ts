@@ -1,8 +1,8 @@
 /**
- * @apify/imdb — a minimalistic, MongoDB-like in-memory document database.
+ * @apify/hiring-database — a minimalistic, MongoDB-like document database.
  *
  * ```ts
- * import { Database, gt } from '@apify/imdb';
+ * import { Database, gt } from '@apify/hiring-database';
  *
  * const db = new Database();
  * const users = await db.newCollection('users');

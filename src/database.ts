@@ -5,7 +5,7 @@ import {
 } from './errors.js';
 
 /**
- * Top-level handle to the in-memory database: a named set of collections.
+ * Top-level handle to the database: a named set of collections.
  */
 export class Database {
   private readonly collections = new Map<string, Collection>();

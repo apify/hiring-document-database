@@ -1,80 +1,104 @@
-# @apify/imdb
+# @apify/hiring-database
 
-A minimalistic, **MongoDB-like in-memory document database** written in TypeScript.
+A minimalistic, MongoDB-like document database for TypeScript.
 
-It is intentionally small — a clean interface for a hiring task, not a Mongo
-clone. Data lives in memory only (no persistence). Documents are schema-less
-JSON-like objects; the only required field is a unique `_id`.
+Documents are schema-less JSON-like objects, each identified by a unique `_id`
+and organized into collections. The library offers a small, fully `async` query
+API with comparison filters and unique indexes.
 
 ## Features
 
-- **Collections** — named bags of documents, created/removed at runtime.
+- **Collections** — named sets of documents, created and removed at runtime.
 - **CRUD** — `insert`, `get`, `list`, `update`, `delete`.
 - **Filters** — equality by default, with `gt` / `gte` / `lt` / `lte` / `ne`
   comparison helpers. Multiple fields are AND-ed.
 - **Async iteration** — `list` returns an async iterator (`for await … of`).
 - **Indexes** — `ensureIndex({ field: 1 | -1 }, { unique?: boolean })`, with
   enforced uniqueness (single and compound).
-- Fully `async` API, ready to drop behind a NestJS service.
-
-## Install
-
-This package is consumed **directly from GitHub** — it is not published to npm.
-Add it as a git dependency in the consuming project's `package.json`:
-
-```json
-{
-  "dependencies": {
-    "@apify/imdb": "github:apify/hiring-in-memory-document-database#claude/clever-wright-3rl05l"
-  }
-}
-```
-
-On `npm install`, the package's `prepare` script builds it automatically, so the
-consumer gets compiled JavaScript + type declarations. The package ships **both
-ESM and CommonJS** builds via the `exports` map, so it works whether your
-NestJS project is CommonJS (the default) or ESM — no extra config.
-
-> For local development you can also use `npm link` or a `file:../path`
-> dependency; the git form above is the most portable.
+- Fully `async` API.
 
 ## Usage
 
 ```ts
-import { Database, gt } from '@apify/imdb';
+import { Database, gt } from '@apify/hiring-database';
 
 const db = new Database();
 const users = await db.newCollection('users');
 
 await users.ensureIndex({ email: 1 }, { unique: true });
 
-await users.insert({ name: 'Ada', email: 'ada@example.com', age: 36 });
-const bob = await users.insert({ name: 'Bob', age: 12 }); // _id auto-generated
+await users.insert({ name: 'Ada', email: 'ada@example.com', age: 36, country: 'UK' });
+const bob = await users.insert({ name: 'Bob', age: 12, country: 'US' }); // _id auto-generated
 
 // Read one by _id.
 const ada = await users.get(bob._id);
 
-// Stream matches: equality (name) AND comparison (age > 18).
+// Stream matches.
 for await (const user of users.list({ age: gt(18) })) {
   console.log(user.name);
 }
 
 // Update all matches; adds fields that don't exist yet. Returns the count.
-const n = await users.update({ age: gt(18) }, { adult: true });
+const updated = await users.update({ age: gt(18) }, { adult: true });
 
 await users.delete(bob._id);
 ```
 
-### Using it in NestJS
+## Filtering
 
-Wrap a single shared `Database` instance in a provider:
+A filter is an object: each key constrains one field, and **all keys are
+combined with AND**. A bare value matches by (deep) equality; the comparison
+helpers match by order.
 
 ```ts
-import { Injectable } from '@nestjs/common';
-import { Database } from '@apify/imdb';
+import { eq, ne, gt, gte, lt, lte } from '@apify/hiring-database';
 
-@Injectable()
-export class DbService extends Database {}
+// Equality — a bare value.
+users.list({ country: 'UK' });
+users.list({ country: eq('UK') }); // explicit, equivalent to the above
+
+// Ordered comparisons.
+users.list({ age: gt(18) });       // age >  18
+users.list({ age: gte(18) });      // age >= 18
+users.list({ age: lt(65) });       // age <  65
+users.list({ age: lte(65) });      // age <= 65
+
+// Inequality.
+users.list({ country: ne('UK') }); // country !== 'UK'
+
+// Several fields at once — AND-ed together.
+users.list({ country: 'UK', age: gte(18), active: true });
+
+// Comparisons work for numbers, strings and dates.
+users.list({ name: gte('M') });                 // names from 'M' onward
+users.list({ createdAt: gt(new Date('2024-01-01')) });
+
+// Nested objects and arrays match by deep (structural) equality.
+users.list({ address: { city: 'Prague', zip: '11000' } });
+users.list({ roles: ['admin', 'editor'] });
+
+// No filter (or an empty one) matches every document.
+users.list();
+users.list({});
+
+// Collecting results into an array.
+const adults = [];
+for await (const user of users.list({ age: gte(18) })) {
+  adults.push(user);
+}
+```
+
+Filters support equality and ordered comparison on top-level fields. There is
+no `$or` / dot-path / nested-operator support.
+
+## Testing
+
+```bash
+npm install        # install dependencies
+npm test           # run the full test suite
+npm run test:watch # re-run on change
+npm run typecheck  # type-check without emitting
+npm run build      # produce the distributable build
 ```
 
 ## API
@@ -101,42 +125,15 @@ export class DbService extends Database {}
 | `ensureIndex(spec, options?): Promise<void>` | Create an index (`1`/`-1`); `{ unique: true }` enforces uniqueness. Idempotent. |
 | `listIndexes(): IndexDescription[]` | Describe the defined indexes. |
 
-### Filters
+## Behaviour & limitations
 
-A filter is an object whose keys are field names. A **bare value means equality**
-(deep/structural for objects and arrays); wrap a value in a helper for ordered
-comparisons:
-
-```ts
-import { eq, ne, gt, gte, lt, lte } from '@apify/imdb';
-
-collection.list({ status: 'active', age: gte(18), score: lt(100) });
-```
-
-All keys are AND-ed. There is intentionally no `$or` / dot-path / nested-operator
-support in this version.
-
-## Design notes & scope
-
-- **In-memory only**, no persistence.
-- `update` affects **every** matching document (the filter is shared with `list`).
-- `_id` is a `string`, auto-generated with a UUID when not supplied, and is
-  **immutable** (updating it throws `ImmutableFieldError`).
-- Reads and writes are **copied at the boundary** (`structuredClone`), so callers
-  can never mutate stored state by holding a reference.
-- Mutations are **atomic**: a write that would violate a unique index is rejected
-  with `DuplicateKeyError` and leaves the collection unchanged.
-- `ensureIndex` records sort direction and enforces `unique`, but queries still
-  scan — index-accelerated lookups are out of scope for this task.
-
-## Development
-
-```bash
-npm install      # install dev deps
-npm test         # run the vitest suite (the spec lives in tests/)
-npm run build    # emit dual CJS + ESM builds with .d.ts into dist/
-npm run typecheck
-```
-
-The test suite is written red-green / TDD-style and doubles as the behavioural
-specification for the database.
+- `update` affects **every** document matching the filter and adds fields that
+  don't exist yet.
+- `_id` is a `string`, auto-generated when omitted, and **immutable** (updating
+  it throws `ImmutableFieldError`).
+- Documents returned by reads are copies — mutating a returned document does not
+  affect stored data.
+- Mutations are **atomic**: a write that would violate a unique index is
+  rejected with `DuplicateKeyError` and leaves the data unchanged.
+- `ensureIndex` records sort direction and enforces `unique`; queries are not
+  yet accelerated by indexes.

@@ -1,5 +1,5 @@
 /**
- * Public type definitions for the in-memory document database.
+ * Public type definitions for the document database.
  *
  * The data model is intentionally schema-less: a document is any JSON-like
  * object that carries a unique `_id`. Everything else is up to the caller.

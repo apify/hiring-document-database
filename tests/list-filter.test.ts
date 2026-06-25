@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Collection, Database, gt, gte, lt, lte, ne } from '../src/index.js';
+import { Collection, Database, eq, gt, gte, lt, lte, ne } from '../src/index.js';
 import type { Document } from '../src/index.js';
 
 async function collect(iter: AsyncIterable<Document>): Promise<Document[]> {
@@ -80,5 +80,22 @@ describe('list + filter', () => {
     await people.insert({ _id: '5', name: 'Lovelace', age: 30, country: 'UK' });
     const seen = await collect(iter);
     expect(seen).toHaveLength(4);
+  });
+
+  it('treats an explicit eq() helper like a bare value', async () => {
+    expect(names(await collect(people.list({ country: eq('US') })))).toEqual([
+      'Hopper',
+    ]);
+  });
+
+  it('yields independent copies — mutating a result does not affect storage', async () => {
+    const [first] = await collect(people.list({ _id: '1' }));
+    (first as Document).name = 'mutated';
+    expect((await people.get('1'))?.name).toBe('Ada');
+  });
+
+  it('is re-iterable by calling list again', async () => {
+    expect(await collect(people.list({ country: 'US' }))).toHaveLength(1);
+    expect(await collect(people.list({ country: 'US' }))).toHaveLength(1);
   });
 });

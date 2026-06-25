@@ -59,4 +59,59 @@ describe('insert / get / delete', () => {
     const second = await users.get('u1');
     expect(second?.tags).toEqual(['a']);
   });
+
+  it('returns a copy — mutating the insert result does not affect storage', async () => {
+    const returned = await users.insert({ _id: 'u1', tags: ['a'] });
+    (returned.tags as string[]).push('b');
+    expect((await users.get('u1'))?.tags).toEqual(['a']);
+  });
+
+  it('hands out independent copies on repeated reads', async () => {
+    await users.insert({ _id: 'u1', tags: ['a'] });
+    const a = await users.get('u1');
+    const b = await users.get('u1');
+    expect(a).not.toBe(b);
+    expect(a).toEqual(b);
+  });
+
+  it('preserves falsy, null, nested and date values', async () => {
+    const when = new Date('2024-01-01T00:00:00.000Z');
+    await users.insert({
+      _id: 'u1',
+      zero: 0,
+      empty: '',
+      flag: false,
+      nothing: null,
+      nested: { a: { b: [1, 2] } },
+      when,
+    });
+    const stored = await users.get('u1');
+    expect(stored).toEqual({
+      _id: 'u1',
+      zero: 0,
+      empty: '',
+      flag: false,
+      nothing: null,
+      nested: { a: { b: [1, 2] } },
+      when,
+    });
+  });
+
+  it('reports the collection size', async () => {
+    expect(users.size).toBe(0);
+    await users.insert({ _id: 'u1' });
+    await users.insert({ _id: 'u2' });
+    expect(users.size).toBe(2);
+    await users.delete('u1');
+    expect(users.size).toBe(1);
+  });
+
+  it('keeps collections isolated from one another', async () => {
+    const db = new Database();
+    const a = await db.newCollection('a');
+    const b = await db.newCollection('b');
+    await a.insert({ _id: 'x', from: 'a' });
+    expect(await a.get('x')).not.toBeNull();
+    expect(await b.get('x')).toBeNull();
+  });
 });

@@ -58,4 +58,48 @@ describe('update', () => {
     // Nothing was applied.
     expect((await users.get('3'))?.name).toBe('Turing');
   });
+
+  it('updates every document when the filter is empty', async () => {
+    const modified = await users.update({}, { active: false });
+    expect(modified).toBe(3);
+  });
+
+  it('overwrites an existing field value', async () => {
+    await users.update({ _id: '1' }, { age: 100 });
+    expect((await users.get('1'))?.age).toBe(100);
+  });
+
+  it('applies several field changes at once', async () => {
+    await users.update({ _id: '1' }, { age: 40, active: false, city: 'London' });
+    const ada = await users.get('1');
+    expect(ada).toMatchObject({ age: 40, active: false, city: 'London' });
+  });
+
+  it('deep-copies the new value — later mutation does not leak into storage', async () => {
+    const tags = ['x'];
+    await users.update({ _id: '1' }, { tags });
+    tags.push('y');
+    expect((await users.get('1'))?.tags).toEqual(['x']);
+  });
+
+  it('rejects an update that would collide two updated documents on a unique index', async () => {
+    // Start from distinct, valid index keys so the index can be created.
+    await users.update({ _id: '1' }, { team: 'red' });
+    await users.update({ _id: '2' }, { team: 'blue' });
+    await users.ensureIndex({ team: 1 }, { unique: true });
+    // Collapsing both 'active' docs onto the same team collides within the batch.
+    await expect(
+      users.update({ active: true }, { team: 'shared' }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+    // Atomic: neither document changed.
+    expect((await users.get('1'))?.team).toBe('red');
+    expect((await users.get('2'))?.team).toBe('blue');
+  });
+
+  it('allows an update that keeps a unique index satisfied', async () => {
+    await users.ensureIndex({ name: 1 }, { unique: true });
+    const modified = await users.update({ _id: '1' }, { name: 'Lovelace' });
+    expect(modified).toBe(1);
+    expect((await users.get('1'))?.name).toBe('Lovelace');
+  });
 });
