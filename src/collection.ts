@@ -35,7 +35,20 @@ export class Collection {
   private readonly documents = new Map<DocumentId, Document>();
   private readonly indexes: IndexDefinition[] = [];
 
-  constructor(public readonly name: string) {}
+  /**
+   * @param name        Collection name.
+   * @param documents   Optional documents to seed the collection with. They are
+   *                    inserted exactly as `insert` would (auto-generating any
+   *                    missing `_id`), so a duplicate `_id` among them throws.
+   */
+  constructor(
+    public readonly name: string,
+    documents: readonly InsertDocument[] = [],
+  ) {
+    for (const document of documents) {
+      this.insertOne(document);
+    }
+  }
 
   /** Number of documents currently stored. */
   get size(): number {
@@ -49,6 +62,11 @@ export class Collection {
    * @throws {DuplicateKeyError} on a duplicate `_id` or a unique-index collision.
    */
   async insert(input: InsertDocument): Promise<Document> {
+    return clone(this.insertOne(input));
+  }
+
+  /** Synchronous insert core, shared by `insert` and constructor seeding. */
+  private insertOne(input: InsertDocument): Document {
     const cloned = clone(input);
     const id = cloned._id ?? generateId();
     const doc: Document = { ...cloned, _id: id };
@@ -59,7 +77,7 @@ export class Collection {
     this.assertUnique([...this.documents.values(), doc]);
 
     this.documents.set(id, doc);
-    return clone(doc);
+    return doc;
   }
 
   /** Returns a copy of the document with the given id, or `null` if absent. */

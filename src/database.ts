@@ -3,12 +3,33 @@ import {
   CollectionAlreadyExistsError,
   CollectionNotFoundError,
 } from './errors.js';
+import type { DatabaseInit } from './types.js';
 
 /**
  * Top-level handle to the database: a named set of collections.
  */
 export class Database {
   private readonly collections = new Map<string, Collection>();
+
+  /**
+   * Creates a database, optionally pre-populated with collections.
+   *
+   * ```ts
+   * const db = new Database({
+   *   users: [{ _id: 'u1', name: 'Ada' }],
+   *   orders: [], // empty collection
+   * });
+   * ```
+   *
+   * @param initial Mapping from collection name to its starting documents.
+   * @throws {DuplicateKeyError} if a collection's seed documents contain a
+   *   duplicate `_id`.
+   */
+  constructor(initial: DatabaseInit = {}) {
+    for (const [name, documents] of Object.entries(initial)) {
+      this.collections.set(name, new Collection(name, documents));
+    }
+  }
 
   /**
    * Creates a new, empty collection and returns it.

@@ -34,6 +34,7 @@ export type {
   Document,
   DocumentId,
   InsertDocument,
+  DatabaseInit,
   Filter,
   FilterValue,
   FieldMatcher,

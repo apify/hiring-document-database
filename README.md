@@ -46,6 +46,28 @@ const updated = await users.update({ age: gt(18) }, { adult: true });
 await users.delete(bob._id);
 ```
 
+### Starting from existing data
+
+A database can be created already populated with collections and documents —
+useful for tests, fixtures or restoring a known state. Pass a mapping from
+collection name to its documents (an empty array creates an empty collection):
+
+```ts
+const db = new Database({
+  users: [
+    { _id: 'u1', name: 'Ada', age: 36 },
+    { _id: 'u2', name: 'Bob', age: 12 },
+  ],
+  orders: [], // created empty
+});
+
+db.listCollections();      // ['users', 'orders']
+db.collection('users').size; // 2
+```
+
+Seed documents go through the same path as `insert`: a missing `_id` is
+auto-generated, and a duplicate `_id` within a collection throws.
+
 ## Filtering
 
 A filter is an object: each key constrains one field, and **all keys are
@@ -146,6 +168,7 @@ npm run build      # produce the distributable build
 
 | Method | Description |
 | --- | --- |
+| `new Database(initial?)` | Create a database, optionally pre-populated: `{ [name]: documents[] }`. |
 | `newCollection(name): Promise<Collection>` | Create a collection. Throws `CollectionAlreadyExistsError` if it exists. |
 | `removeCollection(name): Promise<void>` | Drop a collection. Throws `CollectionNotFoundError` if missing. |
 | `collection(name): Collection` | Get an existing collection. Throws if missing. |

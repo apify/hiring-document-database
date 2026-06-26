@@ -77,3 +77,9 @@ export interface IndexDescription {
   readonly spec: IndexSpec;
   readonly unique: boolean;
 }
+
+/**
+ * Initial state for a {@link Database}: a mapping from collection name to the
+ * documents it starts with. Use an empty array to create an empty collection.
+ */
+export type DatabaseInit = Record<string, readonly InsertDocument[]>;
