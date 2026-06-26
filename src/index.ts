@@ -1,8 +1,8 @@
 /**
- * @apify/hiring-database — a minimalistic, MongoDB-like document database.
+ * @apify/hiring-document-database — a minimalistic, MongoDB-like document database.
  *
  * ```ts
- * import { Database, gt } from '@apify/hiring-database';
+ * import { Database, gt } from '@apify/hiring-document-database';
  *
  * const db = new Database();
  * const users = await db.newCollection('users');

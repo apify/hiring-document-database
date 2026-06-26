@@ -1,4 +1,4 @@
-# @apify/hiring-database
+# @apify/hiring-document-database
 
 A minimalistic, MongoDB-like document database for TypeScript.
 
@@ -24,7 +24,7 @@ dependencies**.
 ## Usage
 
 ```ts
-import { Database, gt } from '@apify/hiring-database';
+import { Database, gt } from '@apify/hiring-document-database';
 
 const db = new Database();
 const users = await db.newCollection('users');
@@ -77,7 +77,7 @@ combined with AND**. A bare value matches by (deep) equality; the comparison
 helpers match by order.
 
 ```ts
-import { eq, ne, gt, gte, lt, lte } from '@apify/hiring-database';
+import { eq, ne, gt, gte, lt, lte } from '@apify/hiring-document-database';
 
 // Equality — a bare value.
 users.list({ country: 'UK' });
@@ -130,7 +130,7 @@ and creating intermediate objects for nested paths, if needed. The update
 helpers express the other operations:
 
 ```ts
-import { inc, dec, unset } from '@apify/hiring-database';
+import { inc, dec, unset } from '@apify/hiring-document-database';
 
 // Set fields (plain values).
 await users.update({ _id: 'u1' }, { name: 'Ada', active: true });

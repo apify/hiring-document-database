@@ -1,5 +1,5 @@
 {
-  "name": "@apify/hiring-database",
+  "name": "@apify/hiring-document-database",
   "version": "0.1.0",
   "description": "A minimalistic, MongoDB-like document database for TypeScript.",
   "license": "MIT",
