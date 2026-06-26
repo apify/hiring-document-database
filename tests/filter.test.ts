@@ -64,6 +64,13 @@ describe('deepEqual', () => {
     expect(deepEqual([1, 2], { 0: 1, 1: 2 })).toBe(false);
   });
 
+  it('compares arrays of objects deeply (element key order independent)', () => {
+    expect(deepEqual([{ a: 1 }, { b: 2 }], [{ a: 1 }, { b: 2 }])).toBe(true);
+    expect(deepEqual([{ a: 1, b: 2 }], [{ b: 2, a: 1 }])).toBe(true);
+    expect(deepEqual([{ a: 1 }], [{ a: 2 }])).toBe(false);
+    expect(deepEqual([{ a: 1 }, { b: 2 }], [{ b: 2 }, { a: 1 }])).toBe(false);
+  });
+
   it('compares objects regardless of key order', () => {
     expect(deepEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
     expect(deepEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);

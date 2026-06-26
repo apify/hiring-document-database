@@ -55,4 +55,14 @@ describe('Database', () => {
     await db.newCollection('b');
     expect(db.listCollections()).toEqual(['a', 'b']);
   });
+
+  it('drops all data when a collection is removed and re-created', async () => {
+    const db = new Database();
+    const c = await db.newCollection('c');
+    await c.insert({ _id: 'x' });
+    await db.removeCollection('c');
+    const fresh = await db.newCollection('c'); // same name is free again
+    expect(fresh.size).toBe(0);
+    expect(await fresh.get('x')).toBeNull();
+  });
 });

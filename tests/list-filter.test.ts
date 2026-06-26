@@ -98,4 +98,14 @@ describe('list + filter', () => {
     expect(await collect(people.list({ country: 'US' }))).toHaveLength(1);
     expect(await collect(people.list({ country: 'US' }))).toHaveLength(1);
   });
+
+  it('matches a bare Date value by instant equality', async () => {
+    const c = await new Database().newCollection('events');
+    await c.insert({ _id: '1', at: new Date('2024-05-06T07:08:09.000Z') });
+    await c.insert({ _id: '2', at: new Date('2020-01-01T00:00:00.000Z') });
+    const hit = await collect(
+      c.list({ at: new Date('2024-05-06T07:08:09.000Z') }),
+    );
+    expect(hit.map((d) => d._id)).toEqual(['1']);
+  });
 });

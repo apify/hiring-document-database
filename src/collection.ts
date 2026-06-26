@@ -18,15 +18,43 @@ import type {
   UpdateChanges,
 } from './types.js';
 
-interface IndexDefinition {
-  readonly fields: string[];
-  readonly spec: IndexSpec;
-  readonly unique: boolean;
-}
-
 /** Deep copy used at every boundary so callers can never mutate stored state. */
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+/**
+ * A collection index.
+ *
+ * A **unique** index keeps a live `entries` map from each document's canonical
+ * key (the combination of its indexed field values) to the id that holds it.
+ * Maintaining this map incrementally on every write makes uniqueness checks
+ * O(1) per document, so inserting `n` documents is O(n) rather than O(n²).
+ *
+ * A **non-unique** index has no `entries` map: its direction is recorded but
+ * nothing is enforced and queries still scan.
+ */
+class Index {
+  /** Canonical key -> id of the holder, for unique indexes; `null` otherwise. */
+  readonly entries: Map<string, DocumentId> | null;
+
+  constructor(
+    readonly fields: string[],
+    readonly spec: IndexSpec,
+    readonly unique: boolean,
+  ) {
+    this.entries = unique ? new Map<string, DocumentId>() : null;
+  }
+
+  /** The indexed field values of a document (a missing field reads as `null`). */
+  valuesOf(doc: Document): unknown[] {
+    return this.fields.map((field) => getPath(doc, field) ?? null);
+  }
+
+  /** The canonical lookup key of a document on this index. */
+  keyOf(doc: Document): string {
+    return canonicalKey(this.valuesOf(doc));
+  }
 }
 
 /**
@@ -93,7 +121,7 @@ export class DocumentCursor implements AsyncIterableIterator<Document> {
  */
 export class Collection {
   private readonly documents = new Map<DocumentId, Document>();
-  private readonly indexes: IndexDefinition[] = [];
+  private readonly indexes: Index[] = [];
 
   /**
    * @param name        Collection name.
@@ -134,9 +162,24 @@ export class Collection {
     if (this.documents.has(id)) {
       throw new DuplicateKeyError(['_id'], [id]);
     }
-    this.assertUnique([...this.documents.values(), doc]);
+
+    // Check every unique index against its key map (O(1) each) before mutating
+    // anything, so a collision on a later index leaves the collection unchanged.
+    const additions: Array<{ entries: Map<string, DocumentId>; key: string }> = [];
+    for (const index of this.indexes) {
+      if (!index.entries) continue;
+      const values = index.valuesOf(doc);
+      const key = canonicalKey(values);
+      if (index.entries.has(key)) {
+        throw new DuplicateKeyError(index.fields, values);
+      }
+      additions.push({ entries: index.entries, key });
+    }
 
     this.documents.set(id, doc);
+    for (const { entries, key } of additions) {
+      entries.set(key, id);
+    }
     return doc;
   }
 
@@ -183,27 +226,45 @@ export class Collection {
     );
     if (matches.length === 0) return 0;
 
-    // Build the proposed documents first; validate before committing anything.
-    // applyChanges may throw (bad increment / path) — because nothing is written
-    // to storage until the loop completes, a failure leaves the collection intact.
-    const proposed = new Map<DocumentId, Document>();
+    // Build the updated documents up front. applyChanges may throw (bad
+    // increment / path); since nothing is committed until every check below
+    // passes, a failure leaves the collection unchanged.
+    const updated = new Map<DocumentId, Document>();
     for (const doc of matches) {
-      const updated = clone(doc);
-      applyChanges(updated, changes);
-      proposed.set(doc._id, updated);
+      const next = clone(doc);
+      applyChanges(next, changes);
+      updated.set(doc._id, next);
     }
 
-    const resulting = new Map(this.documents);
-    for (const [id, doc] of proposed) resulting.set(id, doc);
-    this.assertUnique(resulting.values());
+    this.assertUpdateKeepsUniqueness(updated);
 
-    for (const [id, doc] of proposed) this.documents.set(id, doc);
-    return proposed.size;
+    // Commit. Per unique index, vacate the updated documents' old keys, then
+    // claim their new ones — so a swap of two values commits cleanly.
+    for (const index of this.indexes) {
+      if (!index.entries) continue;
+      for (const id of updated.keys()) {
+        index.entries.delete(index.keyOf(this.documents.get(id)!));
+      }
+      for (const [id, doc] of updated) {
+        index.entries.set(index.keyOf(doc), id);
+      }
+    }
+    for (const [id, doc] of updated) {
+      this.documents.set(id, doc);
+    }
+    return updated.size;
   }
 
   /** Deletes the document with the given id. Returns whether it existed. */
   async delete(id: DocumentId): Promise<boolean> {
-    return this.documents.delete(id);
+    const doc = this.documents.get(id);
+    if (!doc) return false;
+
+    this.documents.delete(id);
+    for (const index of this.indexes) {
+      index.entries?.delete(index.keyOf(doc));
+    }
+    return true;
   }
 
   /**
@@ -233,7 +294,7 @@ export class Collection {
     }
 
     const unique = Boolean(options.unique);
-    const existing = this.indexes.find((def) => sameFields(def.fields, fields));
+    const existing = this.indexes.find((index) => sameFields(index.fields, fields));
     if (existing) {
       if (existing.unique !== unique) {
         throw new DatabaseError(
@@ -243,42 +304,59 @@ export class Collection {
       return; // idempotent
     }
 
-    const def: IndexDefinition = { fields, spec: { ...spec }, unique };
-    this.indexes.push(def);
-    try {
-      this.assertUnique(this.documents.values());
-    } catch (error) {
-      this.indexes.pop(); // roll back the half-created index
-      throw error;
+    const index = new Index(fields, { ...spec }, unique);
+    // Populate a unique index from existing data, rejecting any duplicate. The
+    // index is only registered once it has been built successfully.
+    if (index.entries) {
+      for (const doc of this.documents.values()) {
+        const values = index.valuesOf(doc);
+        const key = canonicalKey(values);
+        if (index.entries.has(key)) {
+          throw new DuplicateKeyError(index.fields, values);
+        }
+        index.entries.set(key, doc._id);
+      }
     }
+    this.indexes.push(index);
   }
 
   /** Describes the indexes defined on this collection. */
   listIndexes(): IndexDescription[] {
-    return this.indexes.map((def) => ({
-      fields: [...def.fields],
-      spec: { ...def.spec },
-      unique: def.unique,
+    return this.indexes.map((index) => ({
+      fields: [...index.fields],
+      spec: { ...index.spec },
+      unique: index.unique,
     }));
   }
 
-  /** Verifies that the given documents satisfy every unique index. */
-  private assertUnique(docs: Iterable<Document>): void {
-    const uniqueIndexes = this.indexes.filter((def) => def.unique);
-    if (uniqueIndexes.length === 0) return;
-
-    const seen = uniqueIndexes.map(() => new Set<string>());
-    for (const doc of docs) {
-      uniqueIndexes.forEach((def, i) => {
-        // A missing indexed field indexes as `null` (so a missing field and an
-        // explicit `null` collide, mirroring MongoDB).
-        const values = def.fields.map((field) => getPath(doc, field) ?? null);
+  /**
+   * Verifies that applying `updated` (id -> new document) violates no unique
+   * index, consulting each index's key map for O(matches) lookups rather than
+   * rescanning the whole collection. Throws on the first conflict.
+   */
+  private assertUpdateKeepsUniqueness(
+    updated: Map<DocumentId, Document>,
+  ): void {
+    for (const index of this.indexes) {
+      if (!index.entries) continue;
+      const claimed = new Map<string, DocumentId>();
+      for (const [id, doc] of updated) {
+        const values = index.valuesOf(doc);
         const key = canonicalKey(values);
-        if (seen[i]!.has(key)) {
-          throw new DuplicateKeyError(def.fields, values);
+
+        // Two updated documents cannot end up with the same key…
+        if (claimed.has(key)) {
+          throw new DuplicateKeyError(index.fields, values);
         }
-        seen[i]!.add(key);
-      });
+        claimed.set(key, id);
+
+        // …nor can an updated document collide with one that is staying put. A
+        // holder that is itself being updated is vacating this key, so allow it.
+        const holder = index.entries.get(key);
+        if (holder !== undefined && !updated.has(holder)) {
+          throw new DuplicateKeyError(index.fields, values);
+        }
+      }
     }
   }
 }

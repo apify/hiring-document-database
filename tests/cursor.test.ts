@@ -96,5 +96,36 @@ describe('list cursor: toArray + limit', () => {
       const rest = await cursor.toArray();
       expect(rest.map((d) => d.n)).toEqual([2, 3, 4, 5]);
     });
+
+    it('serves independent cursors from the same collection', async () => {
+      const a = people.list();
+      const b = people.list();
+      await a.next(); // advance only a
+      expect(await b.toArray()).toHaveLength(5); // b is independent
+      expect(await a.toArray()).toHaveLength(4); // a resumes after its first item
+    });
+
+    it('is unaffected by a delete after the cursor was created', async () => {
+      const cursor = people.list();
+      await people.delete('1');
+      expect(await cursor.toArray()).toHaveLength(5); // snapshot still holds it
+    });
+
+    it('yields the pre-update version of a document (snapshot)', async () => {
+      const cursor = people.list({ _id: '1' });
+      await people.update({ _id: '1' }, { n: 999 });
+      const [doc] = await cursor.toArray();
+      expect(doc?.n).toBe(1); // old value, not 999
+    });
+
+    it('supports early termination with break', async () => {
+      let seen = 0;
+      for await (const doc of people.list()) {
+        void doc;
+        seen += 1;
+        if (seen === 2) break;
+      }
+      expect(seen).toBe(2);
+    });
   });
 });

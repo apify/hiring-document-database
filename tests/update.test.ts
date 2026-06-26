@@ -5,7 +5,9 @@ import {
   Database,
   DuplicateKeyError,
   ImmutableFieldError,
+  InvalidUpdateError,
   gt,
+  inc,
 } from '../src/index.js';
 
 describe('update', () => {
@@ -126,5 +128,31 @@ describe('update', () => {
       users.update({ _id: '3' }, { name: 'Ada' }),
     ).rejects.toBeInstanceOf(DuplicateKeyError);
     expect(users.size).toBe(before);
+  });
+
+  it('is atomic when an operator fails on a later matched document', async () => {
+    const c = await new Database().newCollection('c');
+    await c.insert({ _id: 'a', score: 1 });
+    await c.insert({ _id: 'b', score: 'high' }); // non-numeric
+    await expect(c.update({}, { score: inc(1) })).rejects.toBeInstanceOf(
+      InvalidUpdateError,
+    );
+    // Neither document changed — not even the one processed before the failure.
+    expect((await c.get('a'))?.score).toBe(1);
+    expect((await c.get('b'))?.score).toBe('high');
+  });
+
+  it('treats an empty changes object as a no-op that still counts matches', async () => {
+    const n = await users.update({ active: true }, {});
+    expect(n).toBe(2);
+    expect((await users.get('1'))?.age).toBe(36); // unchanged
+  });
+
+  it('updates normally when a non-unique index is present', async () => {
+    await users.ensureIndex({ active: 1 }); // non-unique → not enforced
+    const n = await users.update({ active: true }, { active: false });
+    expect(n).toBe(2);
+    expect((await users.get('1'))?.active).toBe(false);
+    expect((await users.get('2'))?.active).toBe(false);
   });
 });
