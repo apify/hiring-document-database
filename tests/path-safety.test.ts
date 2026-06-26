@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Collection, Database, InvalidUpdateError } from '../src/index.js';
+import { Collection, Database, InvalidUpdateError, unset } from '../src/index.js';
 import type { Document } from '../src/index.js';
 
 async function collect(iter: AsyncIterable<Document>): Promise<Document[]> {
@@ -39,6 +39,13 @@ describe('path safety (prototype pollution)', () => {
       InvalidUpdateError,
     );
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('ignores unset on an unsafe dot-path without touching the prototype', async () => {
+    const n = await c.update({ _id: '1' }, { '__proto__.toString': unset() });
+    expect(n).toBe(1); // matched, but the unset was a safe no-op
+    expect(typeof ({} as Record<string, unknown>).toString).toBe('function');
+    expect(await c.get('1')).toEqual({ _id: '1', name: 'Ada' });
   });
 
   it('never reads inherited members through a filter', async () => {

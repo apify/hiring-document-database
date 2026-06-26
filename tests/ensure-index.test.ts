@@ -162,6 +162,15 @@ describe('ensureIndex', () => {
     );
   });
 
+  it('indexes boolean values distinctly', async () => {
+    await users.ensureIndex({ active: 1 }, { unique: true });
+    await users.insert({ active: true });
+    await users.insert({ active: false }); // distinct from true
+    await expect(users.insert({ active: true })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
   it('enforces a compound unique index that includes a dot-path field', async () => {
     await users.ensureIndex({ 'profile.team': 1, seat: 1 }, { unique: true });
     await users.insert({ profile: { team: 'a' }, seat: 1 });
