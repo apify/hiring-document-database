@@ -190,4 +190,43 @@ describe('ensureIndex', () => {
     );
     expect(users.size).toBe(before);
   });
+
+  it('treats compound indexes with different field order as distinct', async () => {
+    await users.ensureIndex({ a: 1, b: 1 }, { unique: true });
+    await users.ensureIndex({ b: 1, a: 1 }, { unique: true });
+    expect(users.listIndexes()).toHaveLength(2);
+  });
+
+  it('produces a stable key for out-of-domain nested values (undefined)', async () => {
+    await users.ensureIndex({ meta: 1 }, { unique: true });
+    await users.insert({ _id: 'a', meta: { x: undefined } });
+    await expect(
+      users.insert({ _id: 'b', meta: { x: undefined } }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+  });
+
+  it('indexes Date values by instant', async () => {
+    await users.ensureIndex({ at: 1 }, { unique: true });
+    await users.insert({ at: new Date('2024-01-01T00:00:00.000Z') });
+    await users.insert({ at: new Date('2024-02-01T00:00:00.000Z') }); // distinct
+    await expect(
+      users.insert({ at: new Date('2024-01-01T00:00:00.000Z') }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+  });
+
+  it('indexes array values by element and order', async () => {
+    await users.ensureIndex({ tags: 1 }, { unique: true });
+    await users.insert({ tags: ['a', 'b'] });
+    await users.insert({ tags: ['b', 'a'] }); // different order → distinct
+    await expect(users.insert({ tags: ['a', 'b'] })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
+  it('deletes cleanly on a collection that has only a non-unique index', async () => {
+    await users.ensureIndex({ city: 1 }); // non-unique → no key map to maintain
+    await users.insert({ _id: 'x', city: 'NYC' });
+    expect(await users.delete('x')).toBe(true);
+    expect(users.size).toBe(0);
+  });
 });
