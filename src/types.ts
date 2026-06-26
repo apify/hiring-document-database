@@ -63,6 +63,17 @@ export type Filter = Record<string, FilterValue>;
  */
 export type UpdateChanges = Record<string, unknown>;
 
+/**
+ * Result of {@link Collection.update}.
+ *
+ * `numMatched` is the number of documents that matched the filter (and were
+ * therefore updated). It is `0` when nothing matched.
+ */
+export interface UpdateResult {
+  /** Number of documents matched by the filter. */
+  numMatched: number;
+}
+
 /** Index sort direction, mirroring MongoDB (`1` ascending, `-1` descending). */
 export type SortDirection = 1 | -1;
 

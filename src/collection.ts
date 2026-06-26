@@ -16,6 +16,7 @@ import type {
   IndexSpec,
   InsertDocument,
   UpdateChanges,
+  UpdateResult,
 } from './types.js';
 
 /** Deep copy used at every boundary so callers can never mutate stored state. */
@@ -208,13 +209,14 @@ export class Collection {
 
   /**
    * Applies `changes` to every document matching `filter`. Fields that do not
-   * exist yet are added. Returns the number of documents modified.
+   * exist yet are added. Returns an {@link UpdateResult} whose `numMatched` is
+   * the number of documents matched by the filter (and therefore updated).
    *
    * @throws {ImmutableFieldError} when `changes` tries to alter `_id`.
    * @throws {DuplicateKeyError} when the result would violate a unique index
    *   (no changes are applied in that case).
    */
-  async update(filter: Filter, changes: UpdateChanges): Promise<number> {
+  async update(filter: Filter, changes: UpdateChanges): Promise<UpdateResult> {
     for (const field of Object.keys(changes)) {
       if (field === '_id' || field.startsWith('_id.')) {
         throw new ImmutableFieldError('_id');
@@ -224,7 +226,7 @@ export class Collection {
     const matches = [...this.documents.values()].filter((doc) =>
       matchesFilter(doc, filter),
     );
-    if (matches.length === 0) return 0;
+    if (matches.length === 0) return { numMatched: 0 };
 
     // Build the updated documents up front. applyChanges may throw (bad
     // increment / path); since nothing is committed until every check below
@@ -252,7 +254,7 @@ export class Collection {
     for (const [id, doc] of updated) {
       this.documents.set(id, doc);
     }
-    return updated.size;
+    return { numMatched: updated.size };
   }
 
   /** Deletes the document with the given id. Returns whether it existed. */

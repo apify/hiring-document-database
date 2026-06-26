@@ -93,8 +93,8 @@ describe('update operators', () => {
     });
 
     it('is a no-op for a missing path and still counts the document', async () => {
-      const n = await users.update({ _id: '1' }, { 'nope.gone': unset() });
-      expect(n).toBe(1);
+      const result = await users.update({ _id: '1' }, { 'nope.gone': unset() });
+      expect(result).toEqual({ numMatched: 1 });
       expect((await users.get('1'))?.profile).toEqual({ score: 10, city: 'London' });
     });
   });
@@ -143,8 +143,8 @@ describe('update operators', () => {
 
   it('applies operators across every matching document', async () => {
     await users.insert({ _id: '2', visits: 100 });
-    const n = await users.update({}, { visits: inc(1) });
-    expect(n).toBe(2);
+    const result = await users.update({}, { visits: inc(1) });
+    expect(result).toEqual({ numMatched: 2 });
     expect((await users.get('1'))?.visits).toBe(6);
     expect((await users.get('2'))?.visits).toBe(101);
   });

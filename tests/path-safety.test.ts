@@ -42,8 +42,8 @@ describe('path safety (prototype pollution)', () => {
   });
 
   it('ignores unset on an unsafe dot-path without touching the prototype', async () => {
-    const n = await c.update({ _id: '1' }, { '__proto__.toString': unset() });
-    expect(n).toBe(1); // matched, but the unset was a safe no-op
+    const result = await c.update({ _id: '1' }, { '__proto__.toString': unset() });
+    expect(result).toEqual({ numMatched: 1 }); // matched, but the unset was a safe no-op
     expect(typeof ({} as Record<string, unknown>).toString).toBe('function');
     expect(await c.get('1')).toEqual({ _id: '1', name: 'Ada' });
   });
