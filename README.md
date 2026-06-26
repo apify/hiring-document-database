@@ -21,6 +21,41 @@ dependencies**.
 - **`async` data operations** — document reads and writes return promises;
   `list` returns an async iterator.
 
+## Installation
+
+The package is consumed directly from its Git repository — no npm registry
+involved. Add it to the consuming project's `package.json` as a Git dependency:
+
+```json
+{
+  "dependencies": {
+    "@apify/hiring-document-database": "github:apify/hiring-in-memory-document-database"
+  }
+}
+```
+
+then install:
+
+```bash
+npm install
+```
+
+That's it — on install the package's `prepare` script builds it automatically
+(compiling TypeScript to `dist/`), so you get ready-to-run JavaScript plus type
+declarations. Both ESM and CommonJS consumers work out of the box via the
+package's `exports` map, so it drops straight into, e.g., a NestJS project:
+
+```ts
+import { Database, gt } from '@apify/hiring-document-database';
+```
+
+To pin to a specific commit or tag instead of the default branch, append it
+with `#`:
+
+```json
+"@apify/hiring-document-database": "github:apify/hiring-in-memory-document-database#v0.1.0"
+```
+
 ## Usage
 
 ```ts
