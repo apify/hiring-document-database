@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { Collection, Database, DuplicateKeyError, gt, ne } from '../src/index.js';
+import {
+  Collection,
+  Database,
+  DuplicateKeyError,
+  InvalidUpdateError,
+  gt,
+  ne,
+} from '../src/index.js';
 import type { Document } from '../src/index.js';
 
 async function collect(iter: AsyncIterable<Document>): Promise<Document[]> {
@@ -68,5 +75,37 @@ describe('dot-path unique indexes', () => {
     await expect(
       users.insert({ profile: { email: 'b@x.com' } }),
     ).resolves.toBeDefined();
+  });
+
+  it('rejects creating a unique dot-path index when existing data already collides', async () => {
+    const users = await new Database().newCollection('users');
+    await users.insert({ profile: { email: 'a@x.com' } });
+    await users.insert({ profile: { email: 'a@x.com' } });
+    await expect(
+      users.ensureIndex({ 'profile.email': 1 }, { unique: true }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+    expect(users.listIndexes()).toEqual([]); // not registered on failure
+  });
+});
+
+describe('dot-paths do not traverse arrays', () => {
+  it('resolves an array-index dot-path to undefined on read', async () => {
+    const c = await new Database().newCollection('c');
+    await c.insert({ _id: '1', tags: ['x', 'y'] });
+    // Arrays terminate a path, so 'tags.0' never matches…
+    expect(await collect(c.list({ 'tags.0': 'x' }))).toEqual([]);
+    // …but whole-array equality still works.
+    expect((await collect(c.list({ tags: ['x', 'y'] }))).map((d) => d._id)).toEqual(
+      ['1'],
+    );
+  });
+
+  it('rejects updating a dot-path through an array', async () => {
+    const c = await new Database().newCollection('c');
+    await c.insert({ _id: '1', tags: ['x'] });
+    await expect(
+      c.update({ _id: '1' }, { 'tags.0': 'y' }),
+    ).rejects.toBeInstanceOf(InvalidUpdateError);
+    expect((await c.get('1'))?.tags).toEqual(['x']); // unchanged
   });
 });

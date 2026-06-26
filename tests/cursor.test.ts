@@ -117,5 +117,15 @@ describe('list cursor: toArray + limit', () => {
       const [doc] = await cursor.toArray();
       expect(doc?.n).toBe(1); // old value, not 999
     });
+
+    it('supports early termination with break', async () => {
+      let seen = 0;
+      for await (const doc of people.list()) {
+        void doc;
+        seen += 1;
+        if (seen === 2) break;
+      }
+      expect(seen).toBe(2);
+    });
   });
 });

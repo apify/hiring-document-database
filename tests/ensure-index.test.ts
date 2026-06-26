@@ -229,4 +229,15 @@ describe('ensureIndex', () => {
     expect(await users.delete('x')).toBe(true);
     expect(users.size).toBe(0);
   });
+
+  it('returns defensive copies from listIndexes', async () => {
+    await users.ensureIndex({ a: 1, b: -1 });
+    const first = users.listIndexes();
+    (first[0]!.fields as string[]).push('zzz');
+    (first[0]!.spec as Record<string, number>).a = 999;
+    // A later call is unaffected by mutating an earlier result.
+    const second = users.listIndexes();
+    expect(second[0]!.fields).toEqual(['a', 'b']);
+    expect(second[0]!.spec).toEqual({ a: 1, b: -1 });
+  });
 });

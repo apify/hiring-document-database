@@ -115,6 +115,22 @@ describe('insert / get / delete', () => {
     expect(await b.get('x')).toBeNull();
   });
 
+  it('accepts an empty string as an explicit _id', async () => {
+    const doc = await users.insert({ _id: '', name: 'X' });
+    expect(doc._id).toBe(''); // kept, not auto-generated
+    expect((await users.get(''))?.name).toBe('X');
+    await expect(users.insert({ _id: '' })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
+  it("does not mutate the caller's input object", async () => {
+    const input: { name: string; _id?: string } = { name: 'Ada' };
+    await users.insert(input);
+    expect('_id' in input).toBe(false); // the generated _id lands on the copy only
+    expect(input).toEqual({ name: 'Ada' });
+  });
+
   it('preserves a Date field as a real Date and isolates nested structures', async () => {
     const when = new Date('2024-03-04T05:06:07.000Z');
     await users.insert({ _id: 'u1', when, nested: { arr: [{ x: 1 }] } });
