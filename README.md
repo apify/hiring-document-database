@@ -78,8 +78,9 @@ for await (const user of users.list({ age: gt(18) })) {
   console.log(user.name);
 }
 
-// Update all matches; adds fields that don't exist yet. Returns the count.
-const updated = await users.update({ age: gt(18) }, { adult: true });
+// Update all matches; adds fields that don't exist yet.
+// Returns { numMatched } — the number of documents matched by the filter.
+const { numMatched } = await users.update({ age: gt(18) }, { adult: true });
 
 await users.delete(bob._id);
 ```
@@ -163,7 +164,9 @@ nested-operator support. Dot-paths work for both top-level and nested fields.
 ## Updating documents
 
 `update(filter, changes)` applies `changes` to **every** document matching the
-filter and returns the number modified. Each entry in `changes` is keyed by a
+filter and returns an `UpdateResult` — an object with a single field,
+`numMatched`, the number of documents matched by the filter (and therefore
+updated). It is `0` when nothing matched. Each entry in `changes` is keyed by a
 field name (dot-paths allowed). A **plain value sets** the field — adding it,
 and creating intermediate objects for nested paths, if needed. The update
 helpers express the other operations:

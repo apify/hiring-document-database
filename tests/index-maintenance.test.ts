@@ -29,14 +29,14 @@ describe('incremental unique-index maintenance', () => {
 
   describe('cascading updates (a key held by another updated document)', () => {
     it('increments every document by one without a false collision', async () => {
-      const count = await c.update({}, { n: inc(1) });
-      expect(count).toBe(3);
+      const result = await c.update({}, { n: inc(1) });
+      expect(result).toEqual({ numMatched: 3 });
       expect(await values(c)).toEqual([2, 3, 4]);
     });
 
     it('decrements every document by one without a false collision', async () => {
-      const count = await c.update({}, { n: dec(1) });
-      expect(count).toBe(3);
+      const result = await c.update({}, { n: dec(1) });
+      expect(result).toEqual({ numMatched: 3 });
       expect(await values(c)).toEqual([0, 1, 2]);
     });
   });
@@ -81,8 +81,8 @@ describe('incremental unique-index maintenance', () => {
     });
 
     it('accepts an update that leaves a document on its own value (no-op)', async () => {
-      const count = await c.update({ n: 1 }, { n: 1 });
-      expect(count).toBe(1);
+      const result = await c.update({ n: 1 }, { n: 1 });
+      expect(result).toEqual({ numMatched: 1 });
       expect(await values(c)).toEqual([1, 2, 3]);
     });
   });
@@ -95,8 +95,8 @@ describe('incremental unique-index maintenance', () => {
       await teams.insert({ _id: '2', row: 2, seat: 1 });
       await teams.insert({ _id: '3', row: 3, seat: 1 });
       // row: 1,2,3 -> 2,3,4 (seat constant); each lands where the next used to be.
-      const count = await teams.update({}, { row: inc(1) });
-      expect(count).toBe(3);
+      const result = await teams.update({}, { row: inc(1) });
+      expect(result).toEqual({ numMatched: 3 });
       expect(await values(teams, 'row')).toEqual([2, 3, 4]);
     });
   });

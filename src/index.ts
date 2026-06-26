@@ -41,6 +41,7 @@ export type {
   FieldMatcher,
   ComparisonOperator,
   UpdateChanges,
+  UpdateResult,
   SortDirection,
   IndexSpec,
   IndexOptions,

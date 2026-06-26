@@ -20,17 +20,17 @@ describe('update', () => {
     await users.insert({ _id: '3', name: 'Turing', age: 41, active: false });
   });
 
-  it('updates every document matching the filter and returns the count', async () => {
-    const modified = await users.update({ active: true }, { active: false });
-    expect(modified).toBe(2);
+  it('updates every document matching the filter and returns numMatched', async () => {
+    const result = await users.update({ active: true }, { active: false });
+    expect(result).toEqual({ numMatched: 2 });
     expect((await users.get('1'))?.active).toBe(false);
     expect((await users.get('2'))?.active).toBe(false);
     expect((await users.get('3'))?.active).toBe(false);
   });
 
   it('works with comparison filters', async () => {
-    const modified = await users.update({ age: gt(40) }, { senior: true });
-    expect(modified).toBe(2);
+    const result = await users.update({ age: gt(40) }, { senior: true });
+    expect(result).toEqual({ numMatched: 2 });
     expect((await users.get('1'))?.senior).toBeUndefined();
     expect((await users.get('2'))?.senior).toBe(true);
   });
@@ -40,9 +40,9 @@ describe('update', () => {
     expect((await users.get('1'))?.nickname).toBe('Countess');
   });
 
-  it('returns 0 and changes nothing when nothing matches', async () => {
-    const modified = await users.update({ name: 'Nobody' }, { active: false });
-    expect(modified).toBe(0);
+  it('returns numMatched 0 and changes nothing when nothing matches', async () => {
+    const result = await users.update({ name: 'Nobody' }, { active: false });
+    expect(result).toEqual({ numMatched: 0 });
   });
 
   it('refuses to change the immutable _id', async () => {
@@ -62,8 +62,8 @@ describe('update', () => {
   });
 
   it('updates every document when the filter is empty', async () => {
-    const modified = await users.update({}, { active: false });
-    expect(modified).toBe(3);
+    const result = await users.update({}, { active: false });
+    expect(result).toEqual({ numMatched: 3 });
   });
 
   it('overwrites an existing field value', async () => {
@@ -100,8 +100,8 @@ describe('update', () => {
 
   it('allows an update that keeps a unique index satisfied', async () => {
     await users.ensureIndex({ name: 1 }, { unique: true });
-    const modified = await users.update({ _id: '1' }, { name: 'Lovelace' });
-    expect(modified).toBe(1);
+    const result = await users.update({ _id: '1' }, { name: 'Lovelace' });
+    expect(result).toEqual({ numMatched: 1 });
     expect((await users.get('1'))?.name).toBe('Lovelace');
   });
 
@@ -143,15 +143,15 @@ describe('update', () => {
   });
 
   it('treats an empty changes object as a no-op that still counts matches', async () => {
-    const n = await users.update({ active: true }, {});
-    expect(n).toBe(2);
+    const result = await users.update({ active: true }, {});
+    expect(result).toEqual({ numMatched: 2 });
     expect((await users.get('1'))?.age).toBe(36); // unchanged
   });
 
   it('updates normally when a non-unique index is present', async () => {
     await users.ensureIndex({ active: 1 }); // non-unique → not enforced
-    const n = await users.update({ active: true }, { active: false });
-    expect(n).toBe(2);
+    const result = await users.update({ active: true }, { active: false });
+    expect(result).toEqual({ numMatched: 2 });
     expect((await users.get('1'))?.active).toBe(false);
     expect((await users.get('2'))?.active).toBe(false);
   });

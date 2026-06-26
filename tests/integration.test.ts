@@ -14,7 +14,7 @@ describe('integration', () => {
 
     // Tag and count the adults.
     const tagged = await users.update({ age: gt(18) }, { adult: true, visits: inc(1) });
-    expect(tagged).toBe(2);
+    expect(tagged).toEqual({ numMatched: 2 });
     const adults = await users.list({ adult: true }).toArray();
     expect(adults.map((u) => u.name).sort()).toEqual(['Ada', 'Cay']);
 
