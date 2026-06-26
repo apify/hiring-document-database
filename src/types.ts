@@ -33,7 +33,7 @@ export type ComparisonOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
  * Callers never build these by hand — they use the helpers from `filter.ts`.
  */
 export interface FieldMatcher {
-  readonly __imdbMatcher: true;
+  readonly __matcher: true;
   readonly op: ComparisonOperator;
   readonly value: unknown;
 }
@@ -41,8 +41,12 @@ export interface FieldMatcher {
 /**
  * A value in a {@link Filter}. A bare value means equality; a {@link FieldMatcher}
  * (built via the helpers) expresses a comparison.
+ *
+ * This is intentionally `unknown` (the `| FieldMatcher` arm is documentary):
+ * documents are schema-less, so a filter cannot be statically constrained to a
+ * field's type. Matchers are recognised structurally at runtime.
  */
-export type FilterValue = unknown | FieldMatcher;
+export type FilterValue = unknown;
 
 /**
  * A query filter. Each entry constrains one field; all entries are AND-ed.

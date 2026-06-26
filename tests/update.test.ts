@@ -102,4 +102,29 @@ describe('update', () => {
     expect(modified).toBe(1);
     expect((await users.get('1'))?.name).toBe('Lovelace');
   });
+
+  it('preserves a Date set value as a real Date', async () => {
+    await users.update({ _id: '1' }, { joinedAt: new Date('2024-01-02T03:04:05.000Z') });
+    const stored = await users.get('1');
+    expect(stored?.joinedAt).toBeInstanceOf(Date);
+    expect((stored?.joinedAt as Date).toISOString()).toBe(
+      '2024-01-02T03:04:05.000Z',
+    );
+  });
+
+  it('deep-copies a nested-object set value', async () => {
+    const meta = { a: { b: 1 } };
+    await users.update({ _id: '1' }, { meta });
+    meta.a.b = 999;
+    expect((await users.get('1'))?.meta).toEqual({ a: { b: 1 } });
+  });
+
+  it('leaves the collection size unchanged after a rejected unique update', async () => {
+    await users.ensureIndex({ name: 1 }, { unique: true });
+    const before = users.size;
+    await expect(
+      users.update({ _id: '3' }, { name: 'Ada' }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+    expect(users.size).toBe(before);
+  });
 });

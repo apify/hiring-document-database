@@ -23,11 +23,12 @@ export type { UpdateOperator } from './update.js';
 export { generateId } from './id.js';
 
 export {
-  ImdbError,
+  DatabaseError,
   CollectionAlreadyExistsError,
   CollectionNotFoundError,
   DuplicateKeyError,
   ImmutableFieldError,
+  InvalidUpdateError,
 } from './errors.js';
 
 export type {

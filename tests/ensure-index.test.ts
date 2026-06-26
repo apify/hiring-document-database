@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   Collection,
   Database,
+  DatabaseError,
   DuplicateKeyError,
-  ImdbError,
 } from '../src/index.js';
 
 describe('ensureIndex', () => {
@@ -57,28 +57,30 @@ describe('ensureIndex', () => {
     expect(users.listIndexes()).toEqual([]);
   });
 
-  it('is idempotent for an identical spec and options', async () => {
+  it('is idempotent for an identical spec and options, preserving the definition', async () => {
     await users.ensureIndex({ email: 1 }, { unique: true });
     await users.ensureIndex({ email: 1 }, { unique: true });
-    expect(users.listIndexes()).toHaveLength(1);
+    expect(users.listIndexes()).toEqual([
+      { fields: ['email'], spec: { email: 1 }, unique: true },
+    ]);
   });
 
   it('throws when the same fields are re-indexed with conflicting options', async () => {
     await users.ensureIndex({ email: 1 });
     await expect(
       users.ensureIndex({ email: 1 }, { unique: true }),
-    ).rejects.toBeInstanceOf(ImdbError);
+    ).rejects.toBeInstanceOf(DatabaseError);
   });
 
   it('rejects an empty spec', async () => {
-    await expect(users.ensureIndex({})).rejects.toBeInstanceOf(ImdbError);
+    await expect(users.ensureIndex({})).rejects.toBeInstanceOf(DatabaseError);
   });
 
   it('rejects an invalid direction', async () => {
     await expect(
       // @ts-expect-error - 2 is not a valid SortDirection
       users.ensureIndex({ email: 2 }),
-    ).rejects.toBeInstanceOf(ImdbError);
+    ).rejects.toBeInstanceOf(DatabaseError);
   });
 
   it('treats a missing indexed field as a single null key (collides)', async () => {
@@ -136,5 +138,47 @@ describe('ensureIndex', () => {
       fields: ['email'],
       value: ['a@x.com'],
     });
+  });
+
+  it('distinguishes index values by type (number 1 vs string "1")', async () => {
+    await users.ensureIndex({ k: 1 }, { unique: true });
+    await users.insert({ k: 1 });
+    await expect(users.insert({ k: '1' })).resolves.toBeDefined();
+  });
+
+  it('collides a missing indexed field with an explicit null', async () => {
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    await users.insert({ name: 'no email' }); // field missing
+    await expect(users.insert({ email: null })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
+  it('treats object-valued index keys as equal regardless of key order', async () => {
+    await users.ensureIndex({ meta: 1 }, { unique: true });
+    await users.insert({ meta: { a: 1, b: 2 } });
+    await expect(users.insert({ meta: { b: 2, a: 1 } })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+  });
+
+  it('enforces a compound unique index that includes a dot-path field', async () => {
+    await users.ensureIndex({ 'profile.team': 1, seat: 1 }, { unique: true });
+    await users.insert({ profile: { team: 'a' }, seat: 1 });
+    await users.insert({ profile: { team: 'a' }, seat: 2 }); // same team, other seat
+    await users.insert({ profile: { team: 'b' }, seat: 1 }); // other team, same seat
+    await expect(
+      users.insert({ profile: { team: 'a' }, seat: 1 }),
+    ).rejects.toBeInstanceOf(DuplicateKeyError);
+  });
+
+  it('leaves the collection size unchanged after a rejected duplicate insert', async () => {
+    await users.ensureIndex({ email: 1 }, { unique: true });
+    await users.insert({ email: 'a@x.com' });
+    const before = users.size;
+    await expect(users.insert({ email: 'a@x.com' })).rejects.toBeInstanceOf(
+      DuplicateKeyError,
+    );
+    expect(users.size).toBe(before);
   });
 });

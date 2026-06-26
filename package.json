@@ -3,6 +3,23 @@
   "version": "0.1.0",
   "description": "A minimalistic, MongoDB-like document database for TypeScript.",
   "license": "MIT",
+  "author": "Apify",
+  "keywords": [
+    "database",
+    "document-database",
+    "nosql",
+    "mongodb",
+    "collection",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apify/hiring-in-memory-document-database.git"
+  },
+  "homepage": "https://github.com/apify/hiring-in-memory-document-database#readme",
+  "bugs": {
+    "url": "https://github.com/apify/hiring-in-memory-document-database/issues"
+  },
   "type": "commonjs",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",

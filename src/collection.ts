@@ -1,4 +1,8 @@
-import { DuplicateKeyError, ImdbError, ImmutableFieldError } from './errors.js';
+import {
+  DatabaseError,
+  DuplicateKeyError,
+  ImmutableFieldError,
+} from './errors.js';
 import { matchesFilter } from './filter.js';
 import { generateId } from './id.js';
 import { getPath } from './path.js';
@@ -30,6 +34,9 @@ function clone<T>(value: T): T {
  *
  * All mutating operations are atomic — they validate fully before touching
  * stored state, so a rejected write leaves the collection unchanged.
+ *
+ * Obtain a collection from a {@link Database} (`newCollection` / `collection`)
+ * rather than constructing one directly.
  */
 export class Collection {
   private readonly documents = new Map<DocumentId, Document>();
@@ -72,7 +79,7 @@ export class Collection {
     const doc: Document = { ...cloned, _id: id };
 
     if (this.documents.has(id)) {
-      throw new DuplicateKeyError(['_id'], id);
+      throw new DuplicateKeyError(['_id'], [id]);
     }
     this.assertUnique([...this.documents.values(), doc]);
 
@@ -168,12 +175,12 @@ export class Collection {
   async ensureIndex(spec: IndexSpec, options: IndexOptions = {}): Promise<void> {
     const fields = Object.keys(spec);
     if (fields.length === 0) {
-      throw new ImdbError('Index spec must contain at least one field.');
+      throw new DatabaseError('Index spec must contain at least one field.');
     }
     for (const field of fields) {
       const direction = spec[field];
       if (direction !== 1 && direction !== -1) {
-        throw new ImdbError(
+        throw new DatabaseError(
           `Invalid index direction for "${field}": expected 1 or -1.`,
         );
       }
@@ -183,7 +190,7 @@ export class Collection {
     const existing = this.indexes.find((def) => sameFields(def.fields, fields));
     if (existing) {
       if (existing.unique !== unique) {
-        throw new ImdbError(
+        throw new DatabaseError(
           `Index on { ${fields.join(', ')} } already exists with different options.`,
         );
       }
@@ -209,16 +216,6 @@ export class Collection {
     }));
   }
 
-  /** Builds the lookup key for a unique index from a document's field values. */
-  private indexKey(fields: string[], doc: Document): string {
-    return JSON.stringify(
-      fields.map((field) => {
-        const value = getPath(doc, field);
-        return value === undefined ? null : value;
-      }),
-    );
-  }
-
   /** Verifies that the given documents satisfy every unique index. */
   private assertUnique(docs: Iterable<Document>): void {
     const uniqueIndexes = this.indexes.filter((def) => def.unique);
@@ -227,9 +224,12 @@ export class Collection {
     const seen = uniqueIndexes.map(() => new Set<string>());
     for (const doc of docs) {
       uniqueIndexes.forEach((def, i) => {
-        const key = this.indexKey(def.fields, doc);
+        // A missing indexed field indexes as `null` (so a missing field and an
+        // explicit `null` collide, mirroring MongoDB).
+        const values = def.fields.map((field) => getPath(doc, field) ?? null);
+        const key = canonicalKey(values);
         if (seen[i]!.has(key)) {
-          throw new DuplicateKeyError(def.fields, JSON.parse(key));
+          throw new DuplicateKeyError(def.fields, values);
         }
         seen[i]!.add(key);
       });
@@ -239,4 +239,36 @@ export class Collection {
 
 function sameFields(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((field, index) => field === b[index]);
+}
+
+/**
+ * Canonical, type-tagged encoding of a value for index-key comparison. Designed
+ * to agree with `deepEqual`: object key order is normalised, and types are
+ * tagged so that e.g. the number `1` and the string `"1"` never collide.
+ */
+function canonical(value: unknown): unknown {
+  if (value === null) return ['null'];
+  if (value instanceof Date) return ['d', value.getTime()];
+  if (Array.isArray(value)) return ['a', value.map(canonical)];
+  switch (typeof value) {
+    case 'number':
+      return ['n', value];
+    case 'string':
+      return ['s', value];
+    case 'boolean':
+      return ['b', value];
+    case 'object': {
+      const entries = Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, canonical((value as Record<string, unknown>)[key])]);
+      return ['o', entries];
+    }
+    default:
+      // bigint / undefined / function / symbol — outside the JSON-like domain.
+      return ['x', String(value)];
+  }
+}
+
+function canonicalKey(values: readonly unknown[]): string {
+  return JSON.stringify(values.map(canonical));
 }

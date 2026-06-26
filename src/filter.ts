@@ -7,7 +7,7 @@ import type {
 } from './types.js';
 
 function makeMatcher(op: ComparisonOperator, value: unknown): FieldMatcher {
-  return { __imdbMatcher: true, op, value };
+  return { __matcher: true, op, value };
 }
 
 /**
@@ -30,7 +30,7 @@ export function isMatcher(value: unknown): value is FieldMatcher {
   return (
     typeof value === 'object' &&
     value !== null &&
-    (value as { __imdbMatcher?: unknown }).__imdbMatcher === true
+    (value as { __matcher?: unknown }).__matcher === true
   );
 }
 
@@ -74,13 +74,12 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 
 /**
  * Orders two values of a comparable, like-typed pair (number/number,
- * string/string, Date/Date, bigint/bigint). Returns a negative number, zero or
- * a positive number — or `null` when the values are not order-comparable
- * (different types, objects, etc.), in which case ordered operators never match.
+ * string/string, Date/Date). Returns a negative number, zero or a positive
+ * number — or `null` when the values are not order-comparable (different types,
+ * objects, etc.), in which case ordered operators never match.
  */
 function compare(a: unknown, b: unknown): number | null {
   if (typeof a === 'number' && typeof b === 'number') return a - b;
-  if (typeof a === 'bigint' && typeof b === 'bigint') return Number(a - b);
   if (typeof a === 'string' && typeof b === 'string') {
     return a < b ? -1 : a > b ? 1 : 0;
   }

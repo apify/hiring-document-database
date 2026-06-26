@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   Collection,
   Database,
-  ImdbError,
   ImmutableFieldError,
+  InvalidUpdateError,
   dec,
   inc,
   unset,
@@ -59,8 +59,24 @@ describe('update operators', () => {
     it('rejects incrementing a non-numeric field, atomically', async () => {
       await expect(
         users.update({ _id: '1' }, { name: inc(1) }),
-      ).rejects.toBeInstanceOf(ImdbError);
+      ).rejects.toBeInstanceOf(InvalidUpdateError);
       expect((await users.get('1'))?.name).toBe('Ada');
+    });
+
+    it('dec() defaults the step to 1 on an existing field', async () => {
+      await users.update({ _id: '1' }, { visits: dec() });
+      expect((await users.get('1'))?.visits).toBe(4);
+    });
+
+    it('inc then dec composes to net zero on a fresh field', async () => {
+      await users.update({ _id: '1' }, { points: inc(5) });
+      await users.update({ _id: '1' }, { points: dec(5) });
+      expect((await users.get('1'))?.points).toBe(0);
+    });
+
+    it('dec on a missing nested path creates it with a negative value', async () => {
+      await users.update({ _id: '1' }, { 'scores.daily': dec(3) });
+      expect((await users.get('1'))?.scores).toEqual({ daily: -3 });
     });
   });
 
@@ -101,7 +117,7 @@ describe('update operators', () => {
     it('rejects setting a path through a non-object value, atomically', async () => {
       await expect(
         users.update({ _id: '1' }, { 'name.first': 'Augusta' }),
-      ).rejects.toBeInstanceOf(ImdbError);
+      ).rejects.toBeInstanceOf(InvalidUpdateError);
       expect((await users.get('1'))?.name).toBe('Ada');
     });
   });

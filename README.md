@@ -3,8 +3,9 @@
 A minimalistic, MongoDB-like document database for TypeScript.
 
 Documents are schema-less JSON-like objects, each identified by a unique `_id`
-and organized into collections. The library offers a small, fully `async` query
-API with comparison filters and unique indexes.
+and organized into collections. The library offers a small `async` query API
+with comparison filters and unique indexes, and has **zero runtime
+dependencies**.
 
 ## Features
 
@@ -17,7 +18,8 @@ API with comparison filters and unique indexes.
 - **Async iteration** — `list` returns an async iterator (`for await … of`).
 - **Indexes** — `ensureIndex({ field: 1 | -1 }, { unique?: boolean })`, with
   enforced uniqueness (single and compound).
-- Fully `async` API.
+- **`async` data operations** — document reads and writes return promises;
+  `list` returns an async iterator.
 
 ## Usage
 
@@ -33,7 +35,7 @@ await users.insert({ name: 'Ada', email: 'ada@example.com', age: 36, country: 'U
 const bob = await users.insert({ name: 'Bob', age: 12, country: 'US' }); // _id auto-generated
 
 // Read one by _id.
-const ada = await users.get(bob._id);
+const stored = await users.get(bob._id);
 
 // Stream matches.
 for await (const user of users.list({ age: gt(18) })) {
@@ -150,7 +152,7 @@ await users.update({ active: true }, { lastSeen: Date.now(), visits: inc(1) });
 ```
 
 Incrementing a non-numeric field, or setting a path through a non-object value,
-throws `ImdbError` and leaves the document unchanged.
+throws `InvalidUpdateError` and leaves the document unchanged.
 
 ## Testing
 
@@ -186,6 +188,29 @@ npm run build      # produce the distributable build
 | `delete(id): Promise<boolean>` | Delete by `_id`. Returns whether it existed. |
 | `ensureIndex(spec, options?): Promise<void>` | Create an index (`1`/`-1`); `{ unique: true }` enforces uniqueness. Idempotent. |
 | `listIndexes(): IndexDescription[]` | Describe the defined indexes. |
+| `size: number` | Number of documents currently stored. |
+| `name: string` | The collection's name. |
+
+> Collections are obtained from a `Database` (`newCollection` / `collection`),
+> not constructed directly.
+
+### Utilities
+
+A few building blocks are also exported for convenience and testing:
+
+| Export | Description |
+| --- | --- |
+| `eq` / `ne` / `gt` / `gte` / `lt` / `lte` | Filter comparison helpers. |
+| `inc` / `dec` / `unset` | Update operation helpers. |
+| `isMatcher(value)` / `isUpdateOperator(value)` | Type guards for the helpers above. |
+| `deepEqual(a, b)` | Structural equality used by filters. |
+| `matchesFilter(doc, filter)` | Whether a document satisfies a filter. |
+| `generateId()` | Generate a fresh document id. |
+
+Error classes (`DatabaseError` and its subclasses `CollectionAlreadyExistsError`,
+`CollectionNotFoundError`, `DuplicateKeyError`, `ImmutableFieldError`,
+`InvalidUpdateError`) and the `Document`, `Filter`, `IndexSpec`, `DatabaseInit`,
+`UpdateOperator` types are exported as well.
 
 ## Behaviour & limitations
 
@@ -199,3 +224,12 @@ npm run build      # produce the distributable build
   rejected with `DuplicateKeyError` and leaves the data unchanged.
 - `ensureIndex` records sort direction and enforces `unique`; queries are not
   yet accelerated by indexes.
+- **Async convention**: document reads/writes (`insert`, `get`, `update`,
+  `delete`, `ensureIndex`) return promises for a consistent, forward-compatible
+  surface, while cheap structural operations (`collection`, `hasCollection`,
+  `listCollections`, `size`) are synchronous.
+- **Value domain**: documents must hold JSON-like, structured-cloneable values
+  (objects, arrays, strings, numbers, booleans, `null`, `Date`). Functions and
+  class instances are not supported as field values.
+- Dot-path keys containing `__proto__`, `prototype` or `constructor` are
+  rejected on write, guarding against prototype pollution.
