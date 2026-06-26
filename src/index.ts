@@ -15,7 +15,7 @@
  * ```
  */
 export { Database } from './database.js';
-export { Collection } from './collection.js';
+export { Collection, DocumentCursor } from './collection.js';
 
 export { eq, ne, gt, gte, lt, lte, isMatcher, deepEqual, matchesFilter } from './filter.js';
 export { inc, dec, unset, isUpdateOperator } from './update.js';

@@ -30,6 +30,59 @@ function clone<T>(value: T): T {
 }
 
 /**
+ * A MongoDB-like cursor over query results, returned by {@link Collection.list}.
+ *
+ * It is async-iterable (`for await … of`), can be drained into an array with
+ * {@link DocumentCursor.toArray}, and the number of results can be capped with
+ * {@link DocumentCursor.limit}. The matching set is snapshotted when `list` is
+ * called, and documents are copied as they are produced, so a cursor never
+ * exposes — or is disturbed by — later writes.
+ *
+ * Obtain a cursor from `Collection.list`, not by constructing one directly.
+ */
+export class DocumentCursor implements AsyncIterableIterator<Document> {
+  private position = 0;
+  private maxResults: number | null = null;
+
+  constructor(private readonly snapshot: readonly Document[]) {}
+
+  /**
+   * Caps the number of documents the cursor yields, and returns the cursor for
+   * chaining. Following MongoDB, a limit of `0` (or negative) means "no limit".
+   */
+  limit(count: number): this {
+    this.maxResults = count > 0 ? count : null;
+    return this;
+  }
+
+  private get end(): number {
+    return this.maxResults === null
+      ? this.snapshot.length
+      : Math.min(this.maxResults, this.snapshot.length);
+  }
+
+  async next(): Promise<IteratorResult<Document>> {
+    if (this.position < this.end) {
+      return { value: clone(this.snapshot[this.position++]!), done: false };
+    }
+    return { value: undefined, done: true };
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<Document> {
+    return this;
+  }
+
+  /** Drains the (remaining) cursor into an array of document copies. */
+  async toArray(): Promise<Document[]> {
+    const out: Document[] = [];
+    for (let r = await this.next(); !r.done; r = await this.next()) {
+      out.push(r.value);
+    }
+    return out;
+  }
+}
+
+/**
  * A single collection: an unordered bag of schema-less documents keyed by `_id`.
  *
  * All mutating operations are atomic — they validate fully before touching
@@ -94,27 +147,20 @@ export class Collection {
   }
 
   /**
-   * Returns an async iterator over copies of every document matching `filter`
-   * (defaults to all). The matching set is snapshotted when `list` is called,
-   * so writes made afterwards never disturb the iteration.
+   * Returns a {@link DocumentCursor} over copies of every document matching
+   * `filter` (defaults to all). The matching set is snapshotted when `list` is
+   * called, so writes made afterwards never disturb iteration. The cursor is
+   * async-iterable and also supports `.limit(n)` and `.toArray()`.
+   *
+   * ```ts
+   * const recent = await users.list({ active: true }).limit(10).toArray();
+   * ```
    */
-  list(filter: Filter = {}): AsyncIterableIterator<Document> {
+  list(filter: Filter = {}): DocumentCursor {
     const snapshot = [...this.documents.values()].filter((doc) =>
       matchesFilter(doc, filter),
     );
-    let index = 0;
-    const iterator: AsyncIterableIterator<Document> = {
-      next: async (): Promise<IteratorResult<Document>> => {
-        if (index < snapshot.length) {
-          return { value: clone(snapshot[index++]!), done: false };
-        }
-        return { value: undefined, done: true };
-      },
-      [Symbol.asyncIterator](): AsyncIterableIterator<Document> {
-        return iterator;
-      },
-    };
-    return iterator;
+    return new DocumentCursor(snapshot);
   }
 
   /**

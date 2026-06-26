@@ -15,7 +15,8 @@ dependencies**.
   comparison helpers. Multiple fields are AND-ed.
 - **Updates** — set values, `inc` / `dec` numeric fields, or `unset` them.
 - **Nested fields** — dot-paths (`address.city`) in filters, updates and indexes.
-- **Async iteration** — `list` returns an async iterator (`for await … of`).
+- **Cursors** — `list` returns a cursor: iterate it (`for await … of`),
+  cap it with `.limit(n)`, or collect it with `.toArray()`.
 - **Indexes** — `ensureIndex({ field: 1 | -1 }, { unique?: boolean })`, with
   enforced uniqueness (single and compound).
 - **`async` data operations** — document reads and writes return promises;
@@ -146,10 +147,13 @@ users.list({ 'address.geo.lat': gt(50) });
 users.list();
 users.list({});
 
-// Collecting results into an array.
-const adults = [];
-for await (const user of users.list({ age: gte(18) })) {
-  adults.push(user);
+// Collect results into an array.
+const adults = await users.list({ age: gte(18) }).toArray();
+
+// Cap the number of results, MongoDB-style (a limit of 0 means "no limit").
+const firstPage = await users.list().limit(20).toArray();
+for await (const user of users.list({ active: true }).limit(5)) {
+  // …
 }
 ```
 
@@ -218,7 +222,7 @@ npm run build      # produce the distributable build
 | --- | --- |
 | `insert(doc): Promise<Document>` | Insert one document; auto-generates `_id` if absent. Returns the stored copy. |
 | `get(id): Promise<Document \| null>` | Fetch a single document by `_id`. |
-| `list(filter?): AsyncIterableIterator<Document>` | Async iterator over matches (snapshotted at call time). Empty/omitted filter → all. |
+| `list(filter?): DocumentCursor` | Cursor over matches (snapshot at call time); async-iterable, with `.limit(n)` and `.toArray()`. Empty/omitted filter → all. |
 | `update(filter, changes): Promise<number>` | Apply `changes` to all matches (set / `inc` / `dec` / `unset`, dot-paths supported). Returns count modified. |
 | `delete(id): Promise<boolean>` | Delete by `_id`. Returns whether it existed. |
 | `ensureIndex(spec, options?): Promise<void>` | Create an index (`1`/`-1`); `{ unique: true }` enforces uniqueness. Idempotent. |
@@ -228,6 +232,14 @@ npm run build      # produce the distributable build
 
 > Collections are obtained from a `Database` (`newCollection` / `collection`),
 > not constructed directly.
+
+#### `DocumentCursor` (returned by `list`)
+
+| Member | Description |
+| --- | --- |
+| `for await (const doc of cursor)` | Iterate matches one at a time (documents are copies). |
+| `limit(n): this` | Cap the number of results; chainable. `limit(0)` (or negative) means no limit. |
+| `toArray(): Promise<Document[]>` | Collect the remaining matches into an array. |
 
 ### Utilities
 
