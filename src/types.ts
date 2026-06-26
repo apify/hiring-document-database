@@ -51,9 +51,11 @@ export type FilterValue = unknown | FieldMatcher;
 export type Filter = Record<string, FilterValue>;
 
 /**
- * Update payload: a mapping from field name to its new value. Fields that do
- * not yet exist on a matched document are added. Applies to every document
- * that matches the filter.
+ * Update payload: a mapping from field name to a change. A plain value sets the
+ * field (adding it if absent); the update helpers `inc` / `dec` / `unset`
+ * express numeric adjustments and removals. Field names may use dot-paths (e.g.
+ * `"address.city"`) to target nested properties. Applies to every document that
+ * matches the filter.
  */
 export type UpdateChanges = Record<string, unknown>;
 

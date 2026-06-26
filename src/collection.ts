@@ -1,6 +1,8 @@
 import { DuplicateKeyError, ImdbError, ImmutableFieldError } from './errors.js';
 import { matchesFilter } from './filter.js';
 import { generateId } from './id.js';
+import { getPath } from './path.js';
+import { applyChanges } from './update.js';
 import type {
   Document,
   DocumentId,
@@ -99,8 +101,10 @@ export class Collection {
    *   (no changes are applied in that case).
    */
   async update(filter: Filter, changes: UpdateChanges): Promise<number> {
-    if (Object.prototype.hasOwnProperty.call(changes, '_id')) {
-      throw new ImmutableFieldError('_id');
+    for (const field of Object.keys(changes)) {
+      if (field === '_id' || field.startsWith('_id.')) {
+        throw new ImmutableFieldError('_id');
+      }
     }
 
     const matches = [...this.documents.values()].filter((doc) =>
@@ -109,12 +113,12 @@ export class Collection {
     if (matches.length === 0) return 0;
 
     // Build the proposed documents first; validate before committing anything.
+    // applyChanges may throw (bad increment / path) — because nothing is written
+    // to storage until the loop completes, a failure leaves the collection intact.
     const proposed = new Map<DocumentId, Document>();
     for (const doc of matches) {
       const updated = clone(doc);
-      for (const [field, value] of Object.entries(changes)) {
-        updated[field] = clone(value);
-      }
+      applyChanges(updated, changes);
       proposed.set(doc._id, updated);
     }
 
@@ -191,7 +195,7 @@ export class Collection {
   private indexKey(fields: string[], doc: Document): string {
     return JSON.stringify(
       fields.map((field) => {
-        const value = doc[field];
+        const value = getPath(doc, field);
         return value === undefined ? null : value;
       }),
     );

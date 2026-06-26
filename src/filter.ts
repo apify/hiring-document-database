@@ -1,3 +1,4 @@
+import { getPath } from './path.js';
 import type {
   ComparisonOperator,
   Document,
@@ -118,11 +119,12 @@ function matchesCondition(fieldValue: unknown, matcher: FieldMatcher): boolean {
 
 /**
  * Returns true when `doc` satisfies every entry in `filter`. An empty filter
- * matches all documents.
+ * matches all documents. Field names may use dot-paths (e.g. `"address.city"`)
+ * to address nested properties.
  */
 export function matchesFilter(doc: Document, filter: Filter): boolean {
   for (const [field, condition] of Object.entries(filter)) {
-    const fieldValue = doc[field];
+    const fieldValue = getPath(doc, field);
     const ok = isMatcher(condition)
       ? matchesCondition(fieldValue, condition)
       : deepEqual(fieldValue, condition);

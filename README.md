@@ -12,6 +12,8 @@ API with comparison filters and unique indexes.
 - **CRUD** — `insert`, `get`, `list`, `update`, `delete`.
 - **Filters** — equality by default, with `gt` / `gte` / `lt` / `lte` / `ne`
   comparison helpers. Multiple fields are AND-ed.
+- **Updates** — set values, `inc` / `dec` numeric fields, or `unset` them.
+- **Nested fields** — dot-paths (`address.city`) in filters, updates and indexes.
 - **Async iteration** — `list` returns an async iterator (`for await … of`).
 - **Indexes** — `ensureIndex({ field: 1 | -1 }, { unique?: boolean })`, with
   enforced uniqueness (single and compound).
@@ -77,6 +79,10 @@ users.list({ createdAt: gt(new Date('2024-01-01')) });
 users.list({ address: { city: 'Prague', zip: '11000' } });
 users.list({ roles: ['admin', 'editor'] });
 
+// Dot-paths address nested fields directly.
+users.list({ 'address.city': 'Prague' });
+users.list({ 'address.geo.lat': gt(50) });
+
 // No filter (or an empty one) matches every document.
 users.list();
 users.list({});
@@ -88,8 +94,41 @@ for await (const user of users.list({ age: gte(18) })) {
 }
 ```
 
-Filters support equality and ordered comparison on top-level fields. There is
-no `$or` / dot-path / nested-operator support.
+Filters support equality and ordered comparison; there is no `$or` /
+nested-operator support. Dot-paths work for both top-level and nested fields.
+
+## Updating documents
+
+`update(filter, changes)` applies `changes` to **every** document matching the
+filter and returns the number modified. Each entry in `changes` is keyed by a
+field name (dot-paths allowed). A **plain value sets** the field — adding it,
+and creating intermediate objects for nested paths, if needed. The update
+helpers express the other operations:
+
+```ts
+import { inc, dec, unset } from '@apify/hiring-database';
+
+// Set fields (plain values).
+await users.update({ _id: 'u1' }, { name: 'Ada', active: true });
+
+// Set a nested field (creates `address` if absent).
+await users.update({ _id: 'u1' }, { 'address.city': 'Paris' });
+
+// Increment / decrement numeric fields. A missing field defaults to 0,
+// so inc() on a new field starts counting from there.
+await users.update({ _id: 'u1' }, { visits: inc() });     // +1
+await users.update({ _id: 'u1' }, { credits: dec(5) });   // -5
+await users.update({ _id: 'u1' }, { 'stats.score': inc(10) });
+
+// Remove fields.
+await users.update({ _id: 'u1' }, { tempFlag: unset(), 'profile.draft': unset() });
+
+// Operations can be combined in a single call.
+await users.update({ active: true }, { lastSeen: Date.now(), visits: inc(1) });
+```
+
+Incrementing a non-numeric field, or setting a path through a non-object value,
+throws `ImdbError` and leaves the document unchanged.
 
 ## Testing
 
@@ -120,7 +159,7 @@ npm run build      # produce the distributable build
 | `insert(doc): Promise<Document>` | Insert one document; auto-generates `_id` if absent. Returns the stored copy. |
 | `get(id): Promise<Document \| null>` | Fetch a single document by `_id`. |
 | `list(filter?): AsyncIterableIterator<Document>` | Async iterator over matches (snapshotted at call time). Empty/omitted filter → all. |
-| `update(filter, changes): Promise<number>` | Apply `changes` (field → value) to all matches; adds new fields. Returns count modified. |
+| `update(filter, changes): Promise<number>` | Apply `changes` to all matches (set / `inc` / `dec` / `unset`, dot-paths supported). Returns count modified. |
 | `delete(id): Promise<boolean>` | Delete by `_id`. Returns whether it existed. |
 | `ensureIndex(spec, options?): Promise<void>` | Create an index (`1`/`-1`); `{ unique: true }` enforces uniqueness. Idempotent. |
 | `listIndexes(): IndexDescription[]` | Describe the defined indexes. |

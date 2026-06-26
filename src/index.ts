@@ -18,6 +18,8 @@ export { Database } from './database.js';
 export { Collection } from './collection.js';
 
 export { eq, ne, gt, gte, lt, lte, isMatcher, deepEqual, matchesFilter } from './filter.js';
+export { inc, dec, unset, isUpdateOperator } from './update.js';
+export type { UpdateOperator } from './update.js';
 export { generateId } from './id.js';
 
 export {
