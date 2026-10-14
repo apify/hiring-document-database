@@ -14,11 +14,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/apify/hiring-in-memory-document-database.git"
+    "url": "git+https://github.com/apify/hiring-document-database.git"
   },
-  "homepage": "https://github.com/apify/hiring-in-memory-document-database#readme",
+  "homepage": "https://github.com/apify/hiring-document-database#readme",
   "bugs": {
-    "url": "https://github.com/apify/hiring-in-memory-document-database/issues"
+    "url": "https://github.com/apify/hiring-document-database/issues"
   },
   "type": "commonjs",
   "main": "./dist/cjs/index.js",

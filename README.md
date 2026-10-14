@@ -30,7 +30,7 @@ involved. Add it to the consuming project's `package.json` as a Git dependency:
 ```json
 {
   "dependencies": {
-    "@apify/hiring-document-database": "github:apify/hiring-in-memory-document-database"
+    "@apify/hiring-document-database": "github:apify/hiring-document-database"
   }
 }
 ```
@@ -54,7 +54,7 @@ To pin to a specific commit or tag instead of the default branch, append it
 with `#`:
 
 ```json
-"@apify/hiring-document-database": "github:apify/hiring-in-memory-document-database#v0.1.0"
+"@apify/hiring-document-database": "github:apify/hiring-document-database#v0.1.0"
 ```
 
 ## Usage
